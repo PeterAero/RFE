@@ -1,8 +1,6 @@
 #ifndef OSM_H
 #define OSM_H
 
-//#include <QCoreApplication>
-//#include <sqlite3.h>
 #include <iostream>
 #include <string>
 #include <algorithm>
