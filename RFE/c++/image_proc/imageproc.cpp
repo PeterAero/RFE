@@ -5,17 +5,20 @@ using namespace std;
 using namespace boost::numeric::ublas;
 
 
-void imageProc::initMatrix(int size1, int size2){
+void imageProc::initKernel(int size1, int size2){
+
+    this->BorderSize = size1;
 
     this->FilterKernel.resize(2 * size1 + 1, 2 * size2 + 1);
 
-    for (unsigned int i = 0; i < this->FilterKernel.size1(); i++){
-        for (unsigned int j = 0; j < this->FilterKernel.size2(); j++){
+    for (size_t i = 0; i < this->FilterKernel.size1(); i++){
+        for (size_t j = 0; j < this->FilterKernel.size2(); j++){
             this->FilterKernel(i,j) = 0;
         }
     }
 
 }
+
 void imageProc::printCurrentKernel(){
 
     for(unsigned int i = 0; i < this->FilterKernel.size1(); i++){
@@ -32,18 +35,18 @@ void imageProc::printCurrentKernel(){
 
 }
 
-template <typename T> void imageProc::createDonutMask(T innerRadius, T outerRadius){
+void imageProc::setDonutKernel(float innerRadius, float outerRadius){
 
     float x_center = outerRadius;
     float y_center = outerRadius;
 
     float dist = 0;
 
-    for(unsigned int i = 0; i < this->FilterKernel.size1(); i++){
+    for(size_t i = 0; i < this->FilterKernel.size1(); i++){
 
-        for(unsigned int j = 0; j < this->FilterKernel.size2(); j++){
+        for(size_t j = 0; j < this->FilterKernel.size2(); j++){
 
-            dist = sqrt(pow(x_center - i, 2.) + pow(y_center - j, 2.));
+            dist = std::sqrt(std::pow(x_center - i, 2.) + std::pow(y_center - j, 2.));
 
             if (dist <= outerRadius &&  dist >= innerRadius){
                 this->FilterKernel(i,j) = 1.;
@@ -56,22 +59,21 @@ template <typename T> void imageProc::createDonutMask(T innerRadius, T outerRadi
 
 }
 
-
-template <typename T> void imageProc::createCircleMask(T Radius){
+void imageProc::setCircleKernel(float Radius){
 
     std::cout << this->FilterKernel << std::endl;
-    int x_center = round(Radius);//round(this->NbrRowsFilterKernel/2.);
-    int y_center = round(Radius);//round(this->NbrColumnsFilterKernel/2.);
+    int x_center = std::round(Radius);
+    int y_center = std::round(Radius);
 
     double dist = 0;
 
-    for(unsigned int i = 0; i < this->FilterKernel.size1(); i++){
+    for(size_t i = 0; i < this->FilterKernel.size1(); i++){
 
-        for(unsigned int j = 0; j < this->FilterKernel.size2(); j++){
+        for(size_t j = 0; j < this->FilterKernel.size2(); j++){
 
-            dist = pow(x_center - i, 2.) + pow(y_center - j, 2.);
+            dist = std::pow(x_center - i, 2.) + std::pow(y_center - j, 2.);
 
-            if (dist <= pow(Radius, 2.)){
+            if (dist <= std::pow(Radius, 2.)){
                 this->FilterKernel(i,j) = 1.;
                 this->NbrWeights++;
             }
@@ -82,7 +84,73 @@ template <typename T> void imageProc::createCircleMask(T Radius){
 
 }
 
-void imageProc::saveImg(GDALDataset * srcDataset, float * ImgData, int& BorderSize){
+float imageProc::sigma_prefactor(float bandwidth){
+    float b = bandwidth;
+    return 1.0/ M_PI * std::sqrt(std::log(2.)/2.) * (std::pow( 2., b+1.) / std::pow(2., b-1.));
+}
+
+void imageProc::setGaborKernel(float frequency, float theta, float bandwidth, float sigma_x, float sigma_y,
+                               float n_stds, float offset){
+
+    // sigma_x and sigma_y influencing the spread width of the function response
+    if(sigma_x == 0.){
+        sigma_x = sigma_prefactor(bandwidth) / frequency;
+    }
+
+    if(sigma_y == 0.){
+        sigma_y = sigma_prefactor(bandwidth) / frequency;
+    }
+
+    float value1 = 0.;
+    float value2 = 0.;
+    value1 = std::abs(n_stds * sigma_x * std::cos(theta));
+    value2 = std::abs(n_stds * sigma_y * std::sin(theta));
+    int x0 = std::ceil(std::max(value1, value2));
+
+    value1 = std::abs(n_stds * sigma_y * std::cos(theta));
+    value2 = std::abs(n_stds * sigma_x * std::sin(theta));
+    int y0 = std::ceil(std::max(value1, value2));
+
+    boost::numeric::ublas::matrix<float> y(this->FilterKernel.size1(), this->FilterKernel.size2());
+    boost::numeric::ublas::matrix<float> x(this->FilterKernel.size1(), this->FilterKernel.size2());
+
+    float PixelValue = - float(std::floor(this->FilterKernel.size1()/2.));
+
+    for(int i = 0; i < y.size1(); ++i){
+        for(int j = 0; j < y.size2(); ++j){
+            y(i,j) = PixelValue;
+            x(j,i) = PixelValue;
+        }
+        PixelValue += 1.;
+    }
+
+    boost::numeric::ublas::matrix<float> roty(this->FilterKernel.size1(), this->FilterKernel.size2());
+    boost::numeric::ublas::matrix<float> rotx(this->FilterKernel.size1(), this->FilterKernel.size2());
+
+    for(int i = 0; i < y.size1(); ++i){
+        for(int j = 0; j < y.size2(); ++j){
+            rotx(i,j) = x(i,j) * std::cos(theta) + y(i,j) * std::sin(theta);
+            roty(i,j) = -x(i,j) * std::sin(theta) + y(i,j) * std::cos(theta);
+        }
+    }
+    float MyImag = 0.;
+
+    for(int i = 0; i < this->FilterKernel.size1(); ++i){
+        for(int j = 0; j < this->FilterKernel.size2(); ++j){
+            this->FilterKernel(i, j) = std::exp(-0.5 * (std::pow(rotx(i, j), 2) / std::pow(sigma_x, 2)
+                                                      + std::pow(roty(i, j), 2) / std::pow(sigma_y, 2)));
+            this->FilterKernel(i, j) /= 2 * M_PI * sigma_x * sigma_y;
+            MyImag = (2 * M_PI * frequency * rotx(i,j) + offset);
+            this->FilterKernel(i, j) *= std::cos(MyImag) + 0.*std::sin(MyImag);
+
+        }
+    }
+
+}
+
+void imageProc::saveImg(float * ImgData, int& BorderSize){
+
+    GDALDataset * srcDataset = (GDALDataset *) GDALOpen( this->FileName.c_str(), GA_ReadOnly );
 
     const char * pszFormat = "GTiff";
     GDALDriver * poDriver;
@@ -110,6 +178,7 @@ void imageProc::saveImg(GDALDataset * srcDataset, float * ImgData, int& BorderSi
                       ImgData, NbrColumns, NbrRows, GDT_Float32, 0, 0 );
 
     GDALClose(poDstDataset);
+    GDALClose(srcDataset);
     std::cout << "Stored DEV-Image at: "<< this->OutputFileName << std::endl;
 
 }
@@ -130,6 +199,7 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
     for (size_t i = 0; i <= InputData.size1() - this->FilterKernel.size1(); ++ i){
 
         for (size_t j = 0; j <= InputData.size2() - this->FilterKernel.size2(); ++ j){
+
 
 
             tmpArray = boost::numeric::ublas::subrange(InputData,
@@ -172,14 +242,14 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
     }
 }
 
-void imageProc::filterImg(const double& InnerRadius,
-                          const double& OuterRadius,
-                          const bool& DonutYesNo){
+boost::numeric::ublas::matrix<float> imageProc::getInputData(){
 
     int Index = 0;
     float * InputData;
+
     GDALDataset * SrcDataset = (GDALDataset *) GDALOpen( this->FileName.c_str(), GA_ReadOnly );
     GDALRasterBand * poBand;
+
     poBand = SrcDataset->GetRasterBand( 1 );
     int NbrColumns = SrcDataset->GetRasterXSize();
     int NbrRows = SrcDataset->GetRasterYSize();
@@ -200,28 +270,12 @@ void imageProc::filterImg(const double& InnerRadius,
         }
     }
 
-    /* * * * * * * * * creation of kernel mask for filtering * * * * * * * * */
-    double adfGeoTransform[6];
+    GDALClose(SrcDataset);
 
-    SrcDataset->GetGeoTransform( adfGeoTransform );
-    int KernelMaskSize = 0.;
-    KernelMaskSize = int(std::roundf(OuterRadius/adfGeoTransform[1]));
+    return InputDataBoost;
+}
 
-    this->initMatrix(KernelMaskSize, KernelMaskSize);
-
-    if(DonutYesNo == true){
-        this->createDonutMask(int(std::roundf(InnerRadius/adfGeoTransform[1])),
-                              int(std::roundf(OuterRadius/adfGeoTransform[1])));
-    }else{
-        this->createCircleMask(int(std::roundf(OuterRadius/adfGeoTransform[1])));
-    }
-
-    /* * * * * * * * *  Create and initialize output Array with zeros * * * * * * * * */
-    float * OutputData;
-    OutputData = (float *) CPLMalloc(sizeof(float) * (NbrRows-2*KernelMaskSize) * (NbrColumns-2*KernelMaskSize));
-    for(int i = 0; i < (NbrRows - 2 * KernelMaskSize) * (NbrColumns - 2 * KernelMaskSize); i++){
-        OutputData[i] = 0.;
-    }
+boost::numeric::ublas::matrix<float> imageProc::initOutputData(int NbrRows, int NbrColumns, int KernelMaskSize){
 
     boost::numeric::ublas::matrix<float> OutputDataBoost;
     OutputDataBoost.resize(NbrRows - 2*KernelMaskSize, NbrColumns - 2*KernelMaskSize);
@@ -230,6 +284,31 @@ void imageProc::filterImg(const double& InnerRadius,
             OutputDataBoost(i,j) = 0.;
         }
     }
+    return OutputDataBoost;
+
+}
+
+void imageProc::filterImg(const double& InnerRadius,
+                          const double& OuterRadius,
+                          const bool& DonutYesNo){
+
+    boost::numeric::ublas::matrix<float> InputDataBoost = this->getInputData();
+
+    /* * * * * * * * *  Create and initialize output Array with zeros * * * * * * * * */
+
+    int Index = 0;
+    int NbrColumns = InputDataBoost.size1();
+    int NbrRows = InputDataBoost.size2();
+    int KernelMaskSize = this->BorderSize;//int(std::floor(this->FilterKernel.size1()/2.));
+
+    float * OutputData;
+    OutputData = (float *) CPLMalloc(sizeof(float) * (NbrRows-2*KernelMaskSize) * (NbrColumns-2*KernelMaskSize));
+    for(int i = 0; i < (NbrRows - 2 * KernelMaskSize) * (NbrColumns - 2 * KernelMaskSize); i++){
+        OutputData[i] = 0.;
+    }
+
+    boost::numeric::ublas::matrix<float> OutputDataBoost;
+    OutputDataBoost = this->initOutputData(NbrRows, NbrColumns, KernelMaskSize);
 
 
     /* * * * * * * * * * * * * * computing tpi Image * * * * * * * * * * * * */
@@ -243,9 +322,8 @@ void imageProc::filterImg(const double& InnerRadius,
         }
     }
 
-    //this->saveImg(SrcDataset, OutputData, int(std::roundf(OuterRadius/adfGeoTransform[1])) );
-    this->saveImg(SrcDataset, OutputData, KernelMaskSize);
-    GDALClose(SrcDataset);
+    this->saveImg(OutputData, KernelMaskSize);
+
 
 }
 

@@ -70,14 +70,14 @@ int main(int argc, char *argv[])
 
     const boost::filesystem::path PathOfTiff(PathInputImages);
     const string ImageFileExtension(".tif");
-    /*
+
     dataManager MyMosaicManager(PathOfTiff, ImageFileExtension);
     if (CarFreeMosaic_YesNo == "Y"){
         MyMosaicManager.createComposite(PathOfTiff);
     }else{
         MyMosaicManager.tmpMosaicFile = boost::filesystem::path(PathTmpFiles + "/CarFreeMosaic/MyMosaic.tif");
     }
-    */
+
 
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
     float OuterRadius = 2.0;
     BorderSize = int(std::roundf(OuterRadius / SpatialResolution));
 
-    //MyMosaicManager.tileData(TileSize_Int, BorderSize);
+    MyMosaicManager.tileData(TileSize_Int, BorderSize);
     std::cout << "Tiling finished!"<< std::endl;
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -99,12 +99,21 @@ int main(int argc, char *argv[])
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
     std::cout << "Start Image Processing of Input Image ... "<< std::endl;
-    /*
+
     boost::thread_group threadgroup;
     std::vector<imageProc *> SmartObjects;
 
     for(auto Tile : MyMosaicManager.TilesTifs){
         SmartObjects.push_back(new imageProc(Tile.string(), PathTmpFiles + "/DEV/" + Tile.filename().c_str()));
+    }
+
+    int KernelMaskSize = 0.;
+    KernelMaskSize = int(std::roundf(OuterRadius/SpatialResolution));
+
+    for(size_t i = 0; i < SmartObjects.size(); i++){
+        SmartObjects[i]->initKernel(KernelMaskSize, KernelMaskSize);
+        SmartObjects[i]->setDonutKernel(int(std::roundf(InnerRadius/SpatialResolution)),
+                              int(std::roundf(OuterRadius/SpatialResolution)));
     }
 
     int threadCounter = 0;
@@ -134,7 +143,7 @@ int main(int argc, char *argv[])
         delete SmartObjects[i];
     }
     SmartObjects.clear();
-    */
+
     std::cout << "Image Processing finished!"<< std::endl;
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -143,46 +152,8 @@ int main(int argc, char *argv[])
 
 
     std::cout << "Start OpenStreetMap Processor ... "<< std::endl;
-    /*
-    boost::thread_group threadgroup;
-    int threadCounter = 0;
-    size_t iterCounter = 0;
-
-    dataManager * MyOSMMosaicManager = new dataManager(PathOfTiff, ImageFileExtension);
-    MyOSMMosaicManager->tmpMosaicFile = boost::filesystem::path(PathTmpFiles + "/CarFreeMosaic/MyMosaic.tif");
-    MyOSMMosaicManager->tileData(TileSize_Int, 0);
-
-    std::vector<OSM *> SmartOSMObjects;
-    //for(auto Tile : MyMosaicManager.TilesTifs){
-    for(auto Tile : MyOSMMosaicManager->TilesTifs){
-        SmartOSMObjects.push_back(new OSM(Tile.string(), Tile.filename().replace_extension().c_str(), PathTmpFiles, PathOSM_DB));
-    }
-
-    threadCounter = 0;
-    iterCounter = 0;
-    while(iterCounter < SmartOSMObjects.size()){
-        if (threadCounter < NumberOfCPUs_Int){
-            threadgroup.add_thread(new boost::thread (&OSM::createOSMMask, SmartOSMObjects[iterCounter]));
-            threadCounter++;
-            iterCounter++;
-            if(iterCounter == SmartOSMObjects.size()){
-                threadgroup.join_all();
-            }
-        }else{
-            threadgroup.join_all();
-            threadCounter = 0;
-        }
-    }
 
 
-    for(size_t i = 0; i < SmartOSMObjects.size(); i++){
-        delete SmartOSMObjects[i];
-    }
-
-    SmartOSMObjects.clear();
-
-    */
-    /*
     std::vector<OSM *> SmartOSMObjects;
     for(auto Tile : MyMosaicManager.TilesTifs){
         SmartOSMObjects.push_back(new OSM(Tile.string(), Tile.filename().replace_extension().c_str(), PathTmpFiles, PathOSM_DB));
@@ -210,7 +181,7 @@ int main(int argc, char *argv[])
     }
 
     SmartOSMObjects.clear();
-    */
+
     std::cout << "OpenStreetMap Processor finished! "<< std::endl;
 
 
