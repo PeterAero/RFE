@@ -201,7 +201,7 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
         for (size_t j = 0; j <= InputData.size2() - this->FilterKernel.size2(); ++ j){
 
 
-
+            tmpMean = 0.;
             tmpArray = boost::numeric::ublas::subrange(InputData,
                                                        i, i + this->FilterKernel.size1(),
                                                        j, j + this->FilterKernel.size2());
@@ -216,7 +216,8 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
                 }
 
             }
-
+            OutputData(i,j) = tmpMean;
+            /*
             tmpMean /= this->NbrWeights;
 
             for (size_t m = 0; m < elemProd.size1(); ++ m){
@@ -230,6 +231,7 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
             }
 
             tmpStd = std::sqrt(tmpStd);
+
             if (tmpStd != 0.){
                 // Versatz berücksichtigen, (i,j) jeweils + halbe Kantenstärke
                 OutputData(i, j) = (InputData(i + KernelMaskSize , j + KernelMaskSize) - tmpMean)/tmpStd;
@@ -237,6 +239,7 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
             }else{
                 OutputData(i, j) = 0.;
             }
+            */
 
         }
     }
@@ -293,13 +296,15 @@ void imageProc::filterImg(const double& InnerRadius,
                           const bool& DonutYesNo){
 
     boost::numeric::ublas::matrix<float> InputDataBoost = this->getInputData();
-
+    std::cout << "Size of Input Tile: " << InputDataBoost.size1() << " px x "
+              << InputDataBoost.size2() << " px" << std::endl;
     /* * * * * * * * *  Create and initialize output Array with zeros * * * * * * * * */
 
     int Index = 0;
-    int NbrColumns = InputDataBoost.size1();
-    int NbrRows = InputDataBoost.size2();
+    int NbrRows = InputDataBoost.size1();
+    int NbrColumns = InputDataBoost.size2();
     int KernelMaskSize = this->BorderSize;//int(std::floor(this->FilterKernel.size1()/2.));
+    std::cout << "KernelMaskSize in imgProc: " << KernelMaskSize << std::endl;
 
     float * OutputData;
     OutputData = (float *) CPLMalloc(sizeof(float) * (NbrRows-2*KernelMaskSize) * (NbrColumns-2*KernelMaskSize));
@@ -309,7 +314,8 @@ void imageProc::filterImg(const double& InnerRadius,
 
     boost::numeric::ublas::matrix<float> OutputDataBoost;
     OutputDataBoost = this->initOutputData(NbrRows, NbrColumns, KernelMaskSize);
-
+    std::cout << "Size of Output Tile: " << OutputDataBoost.size1() << " px x "
+              << OutputDataBoost.size2() << " px" << std::endl;
 
     /* * * * * * * * * * * * * * computing tpi Image * * * * * * * * * * * * */
     this->computeTPI(InputDataBoost, OutputDataBoost, KernelMaskSize);
