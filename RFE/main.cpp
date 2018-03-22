@@ -60,11 +60,11 @@ int main(int argc, char *argv[])
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
     // TODO be aware of absolute pathes and fixed variables typesetted here
-    PathInputImages = "/home/peter/Desktop/data/";
-    PathTmpFiles    = "/home/peter/Desktop/data/.tmp";
-    PathOSM_DB      = "/home/peter/Desktop/data/GermanyRoads.sqlite";
-    NumberOfCPUs_Int = 2;
-    const float SpatialResolution = 0.15;
+    PathInputImages = "/home/fisc_p0/Desktop/data/";
+    PathTmpFiles    = "/home/fisc_p0/Desktop/data/.tmp";
+    PathOSM_DB      = "/home/fisc_p0/Desktop/data/GermanyRoads.sqlite";
+    NumberOfCPUs_Int = 8;
+    const float SpatialResolution = 0.2;
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -76,6 +76,8 @@ int main(int argc, char *argv[])
         MyMosaicManager.createComposite(PathOfTiff);
     }else{
         MyMosaicManager.tmpMosaicFile = boost::filesystem::path(PathTmpFiles + "/CarFreeMosaic/MyMosaic.tif");
+        //MyMosaicManager.tmpMosaicFile = boost::filesystem::path(PathTmpFiles + "/CarFreeMosaic/NDSM_lastpulse.tif");
+
     }
 
 
@@ -91,10 +93,11 @@ int main(int argc, char *argv[])
 
     const int BorderSize = int(std::roundf(OuterRadius / SpatialResolution));
 
-    if ( BorderSize % 2 == 0){
-        std::cout << BorderSize % 2 << std::endl;
-        std::cout << "BorderSize is even, please consider change in KernelMaskSize!" << std::endl;
-        return -1;
+    if ( BorderSize % 2 != 0){
+        std::cout << "BorderSize in Main: " << BorderSize << std::endl;
+        //std::cout << BorderSize % 2 << std::endl;
+        //std::cout << "BorderSize is even, please consider change in KernelMaskSize!" << std::endl;
+        //return -1;
     }else{
         std::cout << "BorderSize in Main: " << BorderSize << std::endl;
     }
@@ -103,108 +106,16 @@ int main(int argc, char *argv[])
     std::cout << "Tiling finished!"<< std::endl;
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-    /* * * * * * * * * * * * Image Processing - compute Features Tiles * * * * * * * * * * * * */
-    /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-    /*
-    std::cout << "Start Image Processing of Input Image ... "<< std::endl;
-
-    boost::thread_group threadgroup;
-    std::vector<imageProc *> SmartObjects;
-
-    for(auto Tile : MyMosaicManager.TilesTifs){
-        SmartObjects.push_back(new imageProc(Tile.string(), PathTmpFiles + "/DEV/" + Tile.filename().c_str()));
-    }
-
-    for(size_t i = 0; i < SmartObjects.size(); i++){
-        SmartObjects[i]->initKernel(BorderSize, BorderSize);
-        SmartObjects[i]->setDonutKernel(int(std::roundf(InnerRadius/SpatialResolution)),
-                              int(std::roundf(OuterRadius/SpatialResolution)));
-    }
-
-    int threadCounter = 0;
-    size_t iterCounter = 0;
-    while(iterCounter < SmartObjects.size()){
-
-        if (threadCounter < NumberOfCPUs_Int){
-
-            threadgroup.add_thread(new boost::thread (&imageProc::filterImg, SmartObjects[iterCounter],
-                                                      InnerRadius, OuterRadius, true));
-            threadCounter++;
-            iterCounter++;
-
-            if(iterCounter == SmartObjects.size()){
-                threadgroup.join_all();
-            }
-
-        }else{
-            threadgroup.join_all();
-            threadCounter = 0;
-        }
-
-
-    }
-
-    for(size_t i = 0; i < SmartObjects.size(); i++){
-        delete SmartObjects[i];
-    }
-    SmartObjects.clear();
-
-    std::cout << "Image Processing finished!"<< std::endl;
-    */
-
-    std::cout << "Start Image Processing of Input Image ... "<< std::endl;
-
-    boost::thread_group threadgroup;
-    std::vector<imageProc *> SmartObjects;
-
-    for(auto Tile : MyMosaicManager.TilesTifs){
-        SmartObjects.push_back(new imageProc(Tile.string(), PathTmpFiles + "/GAB/" + Tile.filename().c_str()));
-    }
-
-    for(size_t i = 0; i < SmartObjects.size(); i++){
-        SmartObjects[i]->initKernel(BorderSize, BorderSize);
-        SmartObjects[i]->setGaborKernel(0.25, M_PI/4., 30.0*M_PI/180.0, 0.58/0.25, 0.58/0.25, 3.0, 0.);
-    }
-
-    int threadCounter = 0;
-    size_t iterCounter = 0;
-    while(iterCounter < SmartObjects.size()){
-
-        if (threadCounter < NumberOfCPUs_Int){
-
-            threadgroup.add_thread(new boost::thread (&imageProc::filterImg, SmartObjects[iterCounter],
-                                                      InnerRadius, OuterRadius, true));
-            threadCounter++;
-            iterCounter++;
-
-            if(iterCounter == SmartObjects.size()){
-                threadgroup.join_all();
-            }
-
-        }else{
-            threadgroup.join_all();
-            threadCounter = 0;
-        }
-
-
-    }
-
-    for(size_t i = 0; i < SmartObjects.size(); i++){
-        delete SmartObjects[i];
-    }
-    SmartObjects.clear();
-
-    std::cout << "Image Processing finished!"<< std::endl;
-
-    /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
     /* * * * * * * * * * * * * * Image Processing - create OSM Tiles * * * * * * * * * * * * * */
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+    /* declare necessary variables for multi-threading */
+    boost::thread_group threadgroup;
+    int threadCounter = 0;
+    size_t iterCounter = 0;
 
     std::cout << "Start OpenStreetMap Processor ... "<< std::endl;
-
-
+/*
     std::vector<OSM *> SmartOSMObjects;
     for(auto Tile : MyMosaicManager.TilesTifs){
         SmartOSMObjects.push_back(new OSM(Tile.string(), Tile.filename().replace_extension().c_str(), PathTmpFiles, PathOSM_DB));
@@ -232,8 +143,102 @@ int main(int argc, char *argv[])
     }
 
     SmartOSMObjects.clear();
-
+*/
     std::cout << "OpenStreetMap Processor finished! "<< std::endl;
+
+    /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+    /* * * * * * * * * * * * Image Processing - compute Features Tiles * * * * * * * * * * * * */
+    /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+
+    std::cout << "Start Image Processing of Input Image ... "<< std::endl;
+
+
+    std::vector<imageProc *> SmartObjects;
+
+    for(auto Tile : MyMosaicManager.TilesTifs){
+        SmartObjects.push_back(new imageProc(Tile.string(),
+                                             PathTmpFiles + "/OSM_Mask/" + Tile.filename().c_str(),
+                                             PathTmpFiles + "/DEV/" + Tile.filename().c_str()));
+    }
+
+    for(size_t i = 0; i < SmartObjects.size(); i++){
+        SmartObjects[i]->initKernel(BorderSize, BorderSize);
+        SmartObjects[i]->setDonutKernel(int(std::roundf(InnerRadius/SpatialResolution)),
+                              int(std::roundf(OuterRadius/SpatialResolution)));
+    }
+
+    while(iterCounter < SmartObjects.size()){
+
+        if (threadCounter < NumberOfCPUs_Int){
+
+            threadgroup.add_thread(new boost::thread (&imageProc::filterImg, SmartObjects[iterCounter], false));
+            threadCounter++;
+            iterCounter++;
+
+            if(iterCounter == SmartObjects.size()){
+                threadgroup.join_all();
+            }
+
+        }else{
+            threadgroup.join_all();
+            threadCounter = 0;
+        }
+
+
+    }
+
+    for(size_t i = 0; i < SmartObjects.size(); i++){
+        delete SmartObjects[i];
+    }
+    SmartObjects.clear();
+
+    std::cout << "Processing of Deviation Images finished!"<< std::endl;
+
+
+    std::cout << "Start of Gabor Filtering ...... "<< std::endl;
+
+    for(auto Tile : MyMosaicManager.TilesTifs){
+        SmartObjects.push_back(new imageProc(Tile.string(),
+                                             PathTmpFiles + "/OSM_Mask/" + Tile.filename().c_str(),
+                                             PathTmpFiles + "/GAB/" + Tile.filename().c_str()));
+    }
+
+    for(size_t i = 0; i < SmartObjects.size(); i++){
+        SmartObjects[i]->initKernel(BorderSize, BorderSize);
+        SmartObjects[i]->setGaborKernel(0.25, M_PI/4., 30.0*M_PI/180.0, 0.58/0.25, 0.58/0.25, 3.0, 0.);
+    }
+
+    iterCounter = 0;
+
+    while(iterCounter < SmartObjects.size()){
+
+        if (threadCounter < NumberOfCPUs_Int){
+
+            threadgroup.add_thread(new boost::thread (&imageProc::filterImg, SmartObjects[iterCounter], true));
+            threadCounter++;
+            iterCounter++;
+
+            if(iterCounter == SmartObjects.size()){
+                threadgroup.join_all();
+            }
+
+        }else{
+            threadgroup.join_all();
+            threadCounter = 0;
+        }
+
+
+    }
+
+    for(size_t i = 0; i < SmartObjects.size(); i++){
+        delete SmartObjects[i];
+    }
+    SmartObjects.clear();
+
+    std::cout << "Image Processing finished!"<< std::endl;
+
+
 
 
     return 0;

@@ -547,7 +547,7 @@ void OSM::createOSMMask(){
     const std::string tmpPath_Rectangle  = this->PathTmpFiles + "/vec/" + this->NameOfInputFile + "_rectangle.shp";
     const std::string tmpPath_clip       = this->PathTmpFiles + "/vec/" + this->NameOfInputFile + "_clip.shp";
     const std::string tmpPath_buffer     = this->PathTmpFiles + "/vec/" + this->NameOfInputFile + "_buffer.shp";
-    const std::string AbsPathBufferImage = this->PathTmpFiles + "/img/" + this->NameOfInputFile + "_buffer.tif";
+    const std::string AbsPathBufferImage = this->PathTmpFiles + "/OSM_Mask/" + this->NameOfInputFile + ".tif";
 
     OGRLinearRing MyRing;
     OGRSpatialReference SRS;

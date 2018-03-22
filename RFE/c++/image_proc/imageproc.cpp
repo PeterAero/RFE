@@ -146,19 +146,21 @@ void imageProc::setGaborKernel(float frequency, float theta, float bandwidth, fl
         }
     }
 
+    this->NbrWeights = this->FilterKernel.size1() * this->FilterKernel.size2();
+
 }
 
-void imageProc::saveImg(float * ImgData, int& BorderSize){
+void imageProc::saveImg(float * ImgData){
 
-    GDALDataset * srcDataset = (GDALDataset *) GDALOpen( this->FileName.c_str(), GA_ReadOnly );
+    GDALDataset * poSrcDataset = (GDALDataset *) GDALOpen( this->InputFileName.c_str(), GA_ReadOnly );
 
     const char * pszFormat = "GTiff";
     GDALDriver * poDriver;
     poDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
     GDALDataset * poDstDataset;
     char **papszOptions = NULL;
-    int NbrColumns = srcDataset->GetRasterXSize() - 2*BorderSize;
-    int NbrRows = srcDataset->GetRasterYSize() - 2*BorderSize;
+    int NbrColumns = poSrcDataset->GetRasterXSize() - 2*this->BorderSize;
+    int NbrRows = poSrcDataset->GetRasterYSize() - 2*this->BorderSize;
 
     poDstDataset = poDriver->Create( this->OutputFileName.c_str(), NbrColumns, NbrRows, 1, GDT_Float32,
                                 papszOptions );
@@ -166,11 +168,11 @@ void imageProc::saveImg(float * ImgData, int& BorderSize){
 
     GDALRasterBand * poDstBand;
     double adfGeoTransform[6];
-    srcDataset->GetGeoTransform( adfGeoTransform );
-    adfGeoTransform[0] += BorderSize * adfGeoTransform[1];
-    adfGeoTransform[3] += BorderSize * adfGeoTransform[5];
+    poSrcDataset->GetGeoTransform( adfGeoTransform );
+    adfGeoTransform[0] += this->BorderSize * adfGeoTransform[1];
+    adfGeoTransform[3] += this->BorderSize * adfGeoTransform[5];
     poDstDataset->SetGeoTransform( adfGeoTransform );
-    poDstDataset->SetProjection(srcDataset->GetProjectionRef());
+    poDstDataset->SetProjection(poSrcDataset->GetProjectionRef());
 
     poDstBand = poDstDataset->GetRasterBand(1);
 
@@ -178,14 +180,14 @@ void imageProc::saveImg(float * ImgData, int& BorderSize){
                       ImgData, NbrColumns, NbrRows, GDT_Float32, 0, 0 );
 
     GDALClose(poDstDataset);
-    GDALClose(srcDataset);
-    std::cout << "Stored DEV-Image at: "<< this->OutputFileName << std::endl;
+    GDALClose(poSrcDataset);
+    std::cout << "Stored Image at: "<< this->OutputFileName << std::endl;
 
 }
 
 void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData,
-                           boost::numeric::ublas::matrix<float>& OutputData,
-                           int& KernelMaskSize){
+                           const boost::numeric::ublas::matrix<float>& MaskData,
+                           boost::numeric::ublas::matrix<float>& OutputData){
 
     boost::numeric::ublas::matrix<float> tmpArray;
     tmpArray.resize(this->FilterKernel.size1(), this->FilterKernel.size2());
@@ -200,57 +202,99 @@ void imageProc::computeTPI(const boost::numeric::ublas::matrix<float>& InputData
 
         for (size_t j = 0; j <= InputData.size2() - this->FilterKernel.size2(); ++ j){
 
+            if(MaskData(i + this->BorderSize , j + this->BorderSize) != 0){
 
-            tmpMean = 0.;
-            tmpArray = boost::numeric::ublas::subrange(InputData,
-                                                       i, i + this->FilterKernel.size1(),
-                                                       j, j + this->FilterKernel.size2());
-            elemProd = boost::numeric::ublas::element_prod(tmpArray, this->FilterKernel);
+                tmpMean = 0.;
+                tmpArray = boost::numeric::ublas::subrange(InputData,
+                                                           i, i + this->FilterKernel.size1(),
+                                                           j, j + this->FilterKernel.size2());
+                elemProd = boost::numeric::ublas::element_prod(tmpArray, this->FilterKernel);
 
-            for (size_t m = 0; m < elemProd.size1(); ++ m){
+                for (size_t m = 0; m < elemProd.size1(); ++ m){
 
-                for (size_t n = 0; n < elemProd.size2(); ++ n){
+                    for (size_t n = 0; n < elemProd.size2(); ++ n){
 
-                    tmpMean +=elemProd(m,n);
+                        tmpMean +=elemProd(m,n);
 
-                }
-
-            }
-            OutputData(i,j) = tmpMean;
-            /*
-            tmpMean /= this->NbrWeights;
-
-            for (size_t m = 0; m < elemProd.size1(); ++ m){
-
-                for (size_t n = 0; n < elemProd.size2(); ++ n){
-
-                    tmpStd += std::pow(elemProd(m,n) - tmpMean, 2.);
+                    }
 
                 }
 
+                tmpMean /= this->NbrWeights;
+
+                for (size_t m = 0; m < elemProd.size1(); ++ m){
+
+                    for (size_t n = 0; n < elemProd.size2(); ++ n){
+
+                        tmpStd += std::pow(elemProd(m,n) - tmpMean, 2.);
+
+                    }
+
+                }
+
+                tmpStd = std::sqrt(tmpStd);
+
+                if (tmpStd != 0.){
+                    // Versatz berücksichtigen, (i,j) jeweils + halbe Kantenstärke
+                    OutputData(i, j) = (InputData(i + this->BorderSize , j + this->BorderSize) - tmpMean)/tmpStd;
+
+                }else{
+                    OutputData(i, j) = 0.;
+                }
+
             }
-
-            tmpStd = std::sqrt(tmpStd);
-
-            if (tmpStd != 0.){
-                // Versatz berücksichtigen, (i,j) jeweils + halbe Kantenstärke
-                OutputData(i, j) = (InputData(i + KernelMaskSize , j + KernelMaskSize) - tmpMean)/tmpStd;
-
-            }else{
-                OutputData(i, j) = 0.;
-            }
-            */
 
         }
     }
 }
 
-boost::numeric::ublas::matrix<float> imageProc::getInputData(){
+void imageProc::computeGabor(const boost::numeric::ublas::matrix<float>& InputData,
+                             const boost::numeric::ublas::matrix<float>& MaskData,
+                           boost::numeric::ublas::matrix<float>& OutputData){
+
+    boost::numeric::ublas::matrix<float> tmpArray;
+    tmpArray.resize(this->FilterKernel.size1(), this->FilterKernel.size2());
+
+    boost::numeric::ublas::matrix<float> elemProd;
+    elemProd.resize(this->FilterKernel.size1(), this->FilterKernel.size2());
+
+    float tmpMean = 0.;
+
+    for (size_t i = 0; i <= InputData.size1() - this->FilterKernel.size1(); ++ i){
+
+        for (size_t j = 0; j <= InputData.size2() - this->FilterKernel.size2(); ++ j){
+
+            if(MaskData(i,j) != 0){
+                this->setGaborKernel(0.25, MaskData(i,j), 30.0*M_PI/180.0, 0.58/0.25, 0.58/0.25, 3.0, 0.);
+                tmpMean = 0.;
+                tmpArray = boost::numeric::ublas::subrange(InputData,
+                                                           i, i + this->FilterKernel.size1(),
+                                                           j, j + this->FilterKernel.size2());
+                elemProd = boost::numeric::ublas::element_prod(tmpArray, this->FilterKernel);
+
+                for (size_t m = 0; m < elemProd.size1(); ++ m){
+
+                    for (size_t n = 0; n < elemProd.size2(); ++ n){
+
+                        tmpMean +=elemProd(m,n);
+
+                    }
+
+                }
+                OutputData(i,j) = tmpMean/this->NbrWeights;
+            }else{
+                OutputData(i,j) = 0;
+            }
+        }
+    }
+}
+
+boost::numeric::ublas::matrix<float> imageProc::getInputData(std::string InputFile){
 
     int Index = 0;
     float * InputData;
 
-    GDALDataset * SrcDataset = (GDALDataset *) GDALOpen( this->FileName.c_str(), GA_ReadOnly );
+    GDALDataset * SrcDataset = (GDALDataset *) GDALOpen( InputFile.c_str(), GA_ReadOnly );
     GDALRasterBand * poBand;
 
     poBand = SrcDataset->GetRasterBand( 1 );
@@ -291,34 +335,33 @@ boost::numeric::ublas::matrix<float> imageProc::initOutputData(int NbrRows, int 
 
 }
 
-void imageProc::filterImg(const double& InnerRadius,
-                          const double& OuterRadius,
-                          const bool& DonutYesNo){
+void imageProc::filterImg(bool GaborYesNo){
 
-    boost::numeric::ublas::matrix<float> InputDataBoost = this->getInputData();
-    std::cout << "Size of Input Tile: " << InputDataBoost.size1() << " px x "
-              << InputDataBoost.size2() << " px" << std::endl;
+    boost::numeric::ublas::matrix<float> InputDataBoost = this->getInputData(this->InputFileName);
+    boost::numeric::ublas::matrix<float> MaskDataBoost = this->getInputData(this->MaskFileName);
+
     /* * * * * * * * *  Create and initialize output Array with zeros * * * * * * * * */
 
     int Index = 0;
     int NbrRows = InputDataBoost.size1();
     int NbrColumns = InputDataBoost.size2();
-    int KernelMaskSize = this->BorderSize;//int(std::floor(this->FilterKernel.size1()/2.));
-    std::cout << "KernelMaskSize in imgProc: " << KernelMaskSize << std::endl;
 
     float * OutputData;
-    OutputData = (float *) CPLMalloc(sizeof(float) * (NbrRows-2*KernelMaskSize) * (NbrColumns-2*KernelMaskSize));
-    for(int i = 0; i < (NbrRows - 2 * KernelMaskSize) * (NbrColumns - 2 * KernelMaskSize); i++){
+    OutputData = (float *) CPLMalloc(sizeof(float) * (NbrRows-2*this->BorderSize) * (NbrColumns-2*this->BorderSize));
+    for(int i = 0; i < (NbrRows - 2 * this->BorderSize) * (NbrColumns - 2 * this->BorderSize); i++){
         OutputData[i] = 0.;
     }
 
     boost::numeric::ublas::matrix<float> OutputDataBoost;
-    OutputDataBoost = this->initOutputData(NbrRows, NbrColumns, KernelMaskSize);
-    std::cout << "Size of Output Tile: " << OutputDataBoost.size1() << " px x "
-              << OutputDataBoost.size2() << " px" << std::endl;
+    OutputDataBoost = this->initOutputData(NbrRows, NbrColumns, this->BorderSize);
 
     /* * * * * * * * * * * * * * computing tpi Image * * * * * * * * * * * * */
-    this->computeTPI(InputDataBoost, OutputDataBoost, KernelMaskSize);
+    if(GaborYesNo == false){
+        this->computeTPI(InputDataBoost, MaskDataBoost, OutputDataBoost);
+    }else{
+        this->computeGabor(InputDataBoost, MaskDataBoost, OutputDataBoost);
+    }
+
 
     /* * * * * * * * * * * * * * save tpi Image * * * * * * * * * * * * */
     for(size_t i = 0; i < OutputDataBoost.size1(); i++){
@@ -328,17 +371,18 @@ void imageProc::filterImg(const double& InnerRadius,
         }
     }
 
-    this->saveImg(OutputData, KernelMaskSize);
+    this->saveImg(OutputData);
 
 
 }
 
 
-imageProc::imageProc(std::string FileName, std::string OutputFileName)
+imageProc::imageProc(std::string InputFileName, std::string MaskFileName, std::string OutputFileName)
 {
     GDALAllRegister();
 
-    this->FileName = FileName;
+    this->InputFileName = InputFileName;
+    this->MaskFileName = MaskFileName;
     this->OutputFileName = OutputFileName;
     this->NbrWeights = 0;
 

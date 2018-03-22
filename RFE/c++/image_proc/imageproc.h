@@ -13,35 +13,40 @@
 class imageProc
 {
 public:
-    imageProc(std::string FileName, std::string OutputFileName);
+    imageProc(std::string InputFileName, std::string MaskFileName, std::string OutputFileName);
     ~imageProc();
 
-    void filterImg(const double& InnerRadius, const double& OuterRadius, const bool& DonutYesNo);
+    void filterImg(bool GaborYesNo);
+
+    void initKernel(int size1, int size2);
     void setCircleKernel(float Radius);
     void setDonutKernel(float innerRadius, float outerRadius);
     void setGaborKernel(float frequency, float theta, float bandwidth, float sigma_x, float sigma_y,
                                    float n_stds, float offset);
-    void initKernel(int size1, int size2);
-    std::string FileName;
+
 
 private:
-    boost::numeric::ublas::matrix<float> getInputData();
+    boost::numeric::ublas::matrix<float> getInputData(std::string InputFile);
     boost::numeric::ublas::matrix<float> initOutputData(int NbrRows, int NbrColumns, int KernelMaskSize);
 
     float sigma_prefactor(float bandwidth);
 
-    void saveImg(float * ImgData, int& BorderSize);
+    void saveImg(float * ImgData);
     void printCurrentKernel();
 
     void computeTPI(const boost::numeric::ublas::matrix<float>& InputData,
-                    boost::numeric::ublas::matrix<float>& OutputData,
-                    int& KernelMaskSize);
+                    const boost::numeric::ublas::matrix<float>& MaskData,
+                    boost::numeric::ublas::matrix<float>& OutputData);
 
+    void computeGabor(const boost::numeric::ublas::matrix<float>& InputData,
+                    const boost::numeric::ublas::matrix<float>& MaskData,
+                    boost::numeric::ublas::matrix<float>& OutputData);
 
     float NbrWeights;
     int BorderSize;
     boost::numeric::ublas::matrix<float> FilterKernel;
-
+    std::string InputFileName;
+    std::string MaskFileName;
     std::string OutputFileName;
 
 };
